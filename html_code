@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meetly — Action Item Extractor</title>
+<style>
+:root{--navy:#17233b;--muted:#718096;--blue:#536dfe;--pale:#eef1ff;--line:#e7eaf1;--bg:#f6f7fb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,Arial,sans-serif;color:var(--navy)}
+header{height:72px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 max(5vw,24px)}
+.brand{font-size:21px;font-weight:800;letter-spacing:-.6px}.brand span{color:var(--blue)}.tag{font-size:12px;color:#536dfe;background:var(--pale);padding:8px 12px;border-radius:20px;font-weight:700}
+main{max-width:1100px;margin:48px auto;padding:0 24px}.intro{text-align:center;margin-bottom:34px}.eyebrow{color:var(--blue);font-size:12px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase}.intro h1{font-size:clamp(30px,5vw,43px);letter-spacing:-1.5px;margin:12px 0}.intro p{color:var(--muted);margin:0;font-size:15px;line-height:1.6}
+.workspace{display:grid;grid-template-columns:1.1fr .9fr;gap:22px;align-items:start}.panel{background:white;border:1px solid var(--line);border-radius:17px;padding:25px;box-shadow:0 8px 30px #26324a08}.panel-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:17px}.panel h2{font-size:17px;margin:0}.sub{font-size:12px;color:var(--muted)}
+textarea{width:100%;min-height:290px;resize:vertical;border:1px solid var(--line);border-radius:11px;padding:16px;font:14px/1.7 Inter,Arial,sans-serif;color:var(--navy);outline:none;background:#fcfcfe}textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #536dfe18}
+.controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px}.btn{border:0;border-radius:9px;padding:11px 16px;font-size:13px;font-weight:700;cursor:pointer}.primary{background:var(--blue);color:white}.primary:hover{background:#4058e8}.secondary{background:#f0f2f7;color:#46536a}.textbtn{background:transparent;color:var(--blue);padding:8px}
+.mode{display:flex;gap:8px;margin:18px 0 2px}.mode label{flex:1;border:1px solid var(--line);border-radius:9px;padding:11px;font-size:12px;color:#536078;cursor:pointer}.mode input{accent-color:var(--blue);margin-right:6px}
+.results{min-height:290px}.empty{height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:var(--muted);gap:9px}.empty .symbol{font-size:34px;background:#f1f3ff;width:65px;height:65px;display:grid;place-items:center;border-radius:18px}.empty strong{color:var(--navy);font-size:14px}.empty span{font-size:12px}
+.stats{display:flex;gap:10px;margin:18px 0}.stat{background:#f7f8fc;border-radius:10px;padding:12px 14px;flex:1}.stat b{display:block;font-size:22px}.stat span{font-size:11px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:12px}th{text-align:left;color:#8993a5;font-size:10px;text-transform:uppercase;letter-spacing:.8px;padding:12px 8px;border-bottom:1px solid var(--line)}td{padding:13px 8px;border-bottom:1px solid #f0f1f5;vertical-align:top;line-height:1.5}td:first-child{font-weight:700} .deadline{display:inline-block;background:#eef1ff;color:#485ee4;padding:5px 8px;border-radius:6px;font-size:11px}
+.notice{margin-top:15px;padding:12px;border-radius:9px;background:#f7f8fc;color:#69758a;font-size:11px;line-height:1.5}.error{background:#fff1f0;color:#bd3b32}
+footer{text-align:center;color:#9aa3b2;font-size:11px;padding:32px}
+@media(max-width:760px){main{margin:30px auto}.workspace{grid-template-columns:1fr}.panel{padding:19px}header{height:62px}.results{min-height:220px}}
+</style>
+</head>
+<body>
+<header><div class="brand">meet<span>ly.</span></div><div class="tag">MEETING PRODUCTIVITY</div></header>
+<main>
+ <section class="intro"><div class="eyebrow">Less note-taking. More doing.</div><h1>Turn meeting notes into action.</h1><p>Paste your meeting notes and instantly identify who needs to do what — and by when.</p></section>
+ <section class="workspace">
+  <div class="panel">
+   <div class="panel-head"><h2>Meeting notes</h2><span class="sub">INPUT</span></div>
+   <textarea id="notes" placeholder="Paste your meeting notes here..."></textarea>
+   <div class="controls"><button class="btn secondary" id="sample">Load sample</button><button class="btn textbtn" id="clear">Clear</button></div>
+   <div class="mode">
+    <label><input type="radio" name="mode" value="offline" checked> Offline extraction</label>
+    <label><input type="radio" name="mode" value="live"> Gemini AI</label>
+   </div>
+   <div class="controls"><button class="btn primary" id="extract" style="width:100%">✦ &nbsp; Extract action items</button></div>
+   <div class="notice" id="hint">Offline mode detects lines written like: “Alex: Prepare wireframes by Wednesday.”</div>
+  </div>
+  <div class="panel results">
+   <div class="panel-head"><h2>Action items</h2><span class="sub" id="status">WAITING FOR NOTES</span></div>
+   <div id="output"><div class="empty"><div class="symbol">✧</div><strong>Your action items will appear here</strong><span>Add meeting notes and click extract to get started.</span></div></div>
+  </div>
+ </section>
+</main>
+<footer>Meetly · Make every meeting count</footer>
+<script>
+const sample = `Website revamp kickoff
+Alex: What are the main features you want on the new landing page?
+Client: We need a modern hero section, customer testimonials, and an integrated booking calendar.
+Alex: Would you prefer Calendly integration or a custom-built solution?
+Client: Calendly works fine and keeps it simple.
+Alex: Perfect, I'll prepare the initial wireframes by Wednesday.`;
+
+const notes = document.getElementById('notes');
+const output = document.getElementById('output');
+const status = document.getElementById('status');
+const hint = document.getElementById('hint');
+document.getElementById('sample').addEventListener('click', () => notes.value = sample);
+document.getElementById('clear').addEventListener('click', () => {
+  notes.value = '';
+  output.innerHTML = `<div class="empty"><div class="symbol">✧</div><strong>Your action items will appear here</strong><span>Add meeting notes and click extract to get started.</span></div>`;
+  status.textContent = 'WAITING FOR NOTES';
+});
+document.querySelectorAll('input[name="mode"]').forEach(radio => radio.addEventListener('change', e => {
+  hint.textContent = e.target.value === 'offline'
+    ? 'Offline mode detects lines written like: “Alex: Prepare wireframes by Wednesday.”'
+    : 'Gemini mode sends notes to your Python backend. Start your backend server and configure the API endpoint in this page.';
+}));
+function renderActions(actions) {
+  if (!actions.length) {
+    output.innerHTML = `<div class="empty"><div class="symbol">⌕</div><strong>No action items found</strong><span>Try notes containing a task and a deadline, such as “Alex: Send the report by Friday.”</span></div>`;
+    status.textContent = '0 ITEMS FOUND'; return;
+  }
+  const rows = actions.map(a => `<tr><td>${escapeHTML(a.owner)}</td><td>${escapeHTML(a.task)}</td><td><span class="deadline">${escapeHTML(a.deadline)}</span></td></tr>`).join('');
+  output.innerHTML = `<div class="stats"><div class="stat"><b>${actions.length}</b><span>Action items</span></div><div class="stat"><b>${new Set(actions.map(a=>a.owner)).size}</b><span>People involved</span></div></div><table><thead><tr><th>Owner</th><th>Task</th><th>Deadline</th></tr></thead><tbody>${rows}</tbody></table>`;
+  status.textContent = `${actions.length} ITEMS FOUND`;
+}
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function offlineExtract(text) {
+  const actions = [];
+  const pattern = /^([^:\n]+):\s*(.+?)\s+by\s+([^\n.]+)[.]?$/i;
+  for (const line of text.split(/\r?\n/)) {
+    const match = line.trim().match(pattern);
+    if (match) actions.push({owner:match[1].trim(), task:match[2].trim(), deadline:match[3].trim()});
+  }
+  return actions;
+}
+document.getElementById('extract').addEventListener('click', async () => {
+  const text = notes.value.trim();
+  if (!text) { hint.textContent = 'Please paste your meeting notes first.'; hint.classList.add('error'); return; }
+  hint.classList.remove('error');
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  const button = document.getElementById('extract');
+  button.disabled = true; button.textContent = 'Extracting...'; status.textContent = 'PROCESSING';
+  try {
+    let actions;
+    if (mode === 'offline') {
+      actions = offlineExtract(text);
+    } else {
+      // Change this URL to match the route in your Python backend.
+      const response = await fetch('/extract/live', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({notes:text})
+      });
+      if (!response.ok) throw new Error(`Backend error (${response.status}).`);
+      const data = await response.json();
+      actions = data.actions;
+      if (!Array.isArray(actions)) throw new Error('The backend response must contain an actions array.');
+    }
+    renderActions(actions);
+  } catch (error) {
+    output.innerHTML = `<div class="notice error">${escapeHTML(error.message)}<br>Check that your Python backend is running and the endpoint is correct.</div>`;
+    status.textContent = 'ERROR';
+  } finally {
+    button.disabled = false; button.textContent = '✦  Extract action items';
+  }
+});
+</script>
+</body>
+</html>
